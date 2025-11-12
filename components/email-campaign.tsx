@@ -83,7 +83,10 @@ export function EmailCampaign() {
               to: emailItem.email,
               subject: subject,
               text: content,
-              html: content.replace(/\n/g, '<br>') // Convert newlines to <br> for HTML emails
+              // Replace {{recipientName}} with the recipient's email in both text and HTML content
+              html: content
+                .replace(/\{\{recipientName\}\}/g, emailItem.email.split('@')[0]) // Use the part before @ as name
+                .replace(/\n/g, '<br>') // Convert newlines to <br> for HTML emails
             }),
           });
 
@@ -112,7 +115,6 @@ export function EmailCampaign() {
       // Clear form on successful send
       setEmails([]);
       setSubject('');
-      setContent('');
     } catch (error) {
       console.error('Error sending emails:', error);
       toast.error('Failed to send emails. Please check the console for details.');
@@ -208,7 +210,99 @@ export function EmailCampaign() {
             className="w-full min-h-40 p-4 border border-slate-300 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-slate-400"
           />
           <div className="absolute bottom-3 right-3 flex gap-2">
-            <button className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded">
+            <button 
+              onClick={() => {
+                const paragraphs = content
+                  .split('\n\n')
+                  .filter(p => p.trim() !== '');
+
+                let htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Template</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333333;
+      margin: 0;
+      padding: 20px;
+      background-color: #f8f9fa;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #007BFF;
+      font-size: 20px;
+    }
+    p {
+      font-size: 15px;
+      margin: 10px 0;
+    }
+    .button {
+      display: inline-block;
+      background-color: #007BFF;
+      color: #ffffff !important;
+      padding: 12px 24px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: bold;
+      margin-top: 20px;
+    }
+    .footer {
+      margin-top: 30px;
+      font-size: 12px;
+      color: #666666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Dear {{recipientName}},</h1>
+`;
+
+                // Convert paragraphs to HTML
+                paragraphs.forEach(para => {
+                  // Check if paragraph contains a URL
+                  const urlMatch = para.match(/\b(https?:\/\/[^\s]+)\b/);
+
+                  if (urlMatch) {
+                    const url = urlMatch[0];
+                    const text = para.replace(url, '').trim() || 'Click here';
+                    htmlContent += `    <p style="text-align: center;">
+      <a href="${url}" class="button" target="_blank">
+        ${text}
+      </a>
+    </p>\n`;
+                  } else {
+                    // Regular paragraph
+                    htmlContent += `    <p>${para.replace(/\n/g, '<br>')}</p>\n`;
+                  }
+                });
+
+                // Add closing tags
+                htmlContent += `    
+    <div class="footer">
+      © ${new Date().getFullYear()} .
+    </div>
+  </div>
+</body>
+</html>`;
+
+                setContent(htmlContent);
+                toast.success('Content converted to HTML template!');
+              }}
+              className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded"
+              title="Convert to HTML Template"
+            >
               <Code className="w-5 h-5" />
             </button>
             <button className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded">

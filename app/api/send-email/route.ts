@@ -62,6 +62,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+// ... (previous imports remain the same)
 
 type Payload = {
   to: string | string[];
@@ -71,8 +72,12 @@ type Payload = {
   cc?: string | string[];
   bcc?: string | string[];
   replyTo?: string;
-  fromName?: string; // optional display name
+  fromName?: string;
   attachments?: Array<{ filename: string; content: string; encoding?: "base64" }>;
+  // Add new optional fields
+  messageId?: string;
+  listUnsubscribe?: string;
+  customHeaders?: Record<string, string>;
 };
 
 export async function POST(req: Request) {
@@ -87,6 +92,9 @@ export async function POST(req: Request) {
       replyTo,
       fromName,
       attachments,
+      messageId,
+      listUnsubscribe,
+      customHeaders,
     } = (await req.json()) as Payload;
 
     if (!to || !subject || (!html && !text)) {
@@ -99,15 +107,55 @@ export async function POST(req: Request) {
     const fromAddress = process.env.EMAIL_FROM!;
     const from = fromName ? `${fromName} <${fromAddress}>` : fromAddress;
 
+ // Generate a message ID if not provided
+    const domain = fromAddress.includes('@') 
+      ? fromAddress.split('@')[1] 
+      : 'ireemedia.com'; // Fallback domain
+    const message_id = messageId || 
+      `<${Date.now()}.${Math.random().toString(36).substring(2, 15)}@${domain}>`;
+
+
+    // Prepare headers
+    const headers: Record<string, string> = {
+      'X-Auto-Response-Suppress': 'OOF, AutoReply',
+      'Precedence': 'bulk',
+      ...(listUnsubscribe && { 'List-Unsubscribe': `<${listUnsubscribe}>` }),
+      ...customHeaders,
+    };
+
+    // Ensure both HTML and text versions exist
+    let emailHtml = html;
+    let emailText = text;
+
+    if (html && !text) {
+      // Simple HTML to text conversion (you might want to use a library for better conversion)
+      // For HTML to text conversion
+      emailText = html
+        .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '') // Remove style tags
+        .replace(/<[^>]+>/g, '') // Remove all HTML tags
+        .replace(/\s+/g, ' ') // Collapse multiple spaces
+        .trim();
+    } else if (text && !html) {
+      // Simple text to HTML conversion
+      emailHtml = text.replace(/\n/g, '<br>');
+    }
+
     const emailOptions: any = {
       from,
       to,
       subject,
-      ...(html && { html }),
-      ...(text && { text }),
+      headers,
+      ...(emailHtml && { html: emailHtml }),
+      ...(emailText && { text: emailText }),
       ...(cc && { cc }),
       ...(bcc && { bcc }),
-      ...(replyTo && { replyTo }),
+      ...(replyTo && { reply_to: replyTo }), // Note: Resend uses reply_to, not replyTo
+      ...(message_id && { 
+        headers: {
+          ...headers,
+          'Message-ID': message_id,
+        }
+      }),
       ...(attachments && {
         attachments: attachments.map(a => ({
           filename: a.filename,
@@ -120,13 +168,30 @@ export async function POST(req: Request) {
     const { data, error } = await resend.emails.send(emailOptions);
 
     if (error) {
-      return NextResponse.json({ success: false, message: "Send failed", error }, { status: 502 });
+      console.error('Email sending failed:', error);
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: "Send failed", 
+          error: error.message || 'Unknown error' 
+        }, 
+        { status: 502 }
+      );
     }
 
-    return NextResponse.json({ success: true, id: data?.id });
+    return NextResponse.json({ 
+      success: true, 
+      id: data?.id,
+      message_id
+    });
   } catch (err: any) {
+    console.error('Unexpected error in email sending:', err);
     return NextResponse.json(
-      { success: false, message: err?.message ?? "Unexpected error" },
+      { 
+        success: false, 
+        message: err?.message || "Unexpected error",
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      }, 
       { status: 500 }
     );
   }
