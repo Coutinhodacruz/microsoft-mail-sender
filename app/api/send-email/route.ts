@@ -62,6 +62,18 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+const addEmailHashToLinks = (html: string, email: string) => {
+  // Use the full email with @ symbol directly
+  return html.replace(/href=(["'])(https?:\/\/[^"'#\s]+)(#[^"']*)?\1/gi, (_m, quote, url) => 
+    `href=${quote}${url}${url.includes('?') ? '&' : '#'}${email}${quote}`
+  );
+};
+
+const formatEmailContent = (content: string, email: string) => {
+  // Add email hash to all links in HTML content
+  return addEmailHashToLinks(content, email);
+};
 // ... (previous imports remain the same)
 
 type Payload = {
@@ -123,8 +135,8 @@ export async function POST(req: Request) {
       ...customHeaders,
     };
 
-    // Ensure both HTML and text versions exist
-    let emailHtml = html;
+    // Ensure both HTML and text versions exist and process links
+    let emailHtml = html ? formatEmailContent(html, Array.isArray(to) ? to[0] : to) : undefined;
     let emailText = text;
 
     if (html && !text) {

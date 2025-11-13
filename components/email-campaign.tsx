@@ -81,12 +81,19 @@ export function EmailCampaign() {
             },
             body: JSON.stringify({
               to: emailItem.email,
-              subject: subject,
-              text: content,
-              // Replace {{recipientName}} with the recipient's email in both text and HTML content
+              subject: subject.trim(),
+              text: content.trim().replace(/\s+\n\s+/g, '\n').replace(/\n{3,}/g, '\n\n').trim(),
+              // Format HTML content with proper spacing
               html: content
-                .replace(/\{\{recipientName\}\}/g, emailItem.email.split('@')[0]) // Use the part before @ as name
-                .replace(/\n/g, '<br>') // Convert newlines to <br> for HTML emails
+                .trim()
+                // Replace recipient name placeholder
+                .replace(/\{\{recipientName\}\}/g, emailItem.email.split('@')[0])
+                // Normalize line breaks and spacing
+                .replace(/\s+\n\s+/g, '\n')
+                .replace(/\n{3,}/g, '\n\n')
+                // Convert double newlines to paragraphs, single newlines to <br>
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/\n/g, '<br>')
             }),
           });
 
@@ -114,7 +121,6 @@ export function EmailCampaign() {
 
       // Clear form on successful send
       setEmails([]);
-      setSubject('');
     } catch (error) {
       console.error('Error sending emails:', error);
       toast.error('Failed to send emails. Please check the console for details.');
